@@ -5,6 +5,8 @@ A language designed for matrix manipulation
 
 **Note:** This language is also called "Unnamed", what happend is I forgot I named this language so I called it "Unnamed" and it kinda stuck
 
+**Another NOTE:** Blocks will be rewritten soon with ES6 (and ES5), I've already started on this.
+
 ## Documentation
 
 The shorthand is a shorter alternative to the command name so Blocks could be sutible for code-golfing.
