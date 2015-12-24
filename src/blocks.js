@@ -8,10 +8,18 @@ var _createClass = (function () { function defineProperties(target, props) { for
 
 function _toArray(arr) { return Array.isArray(arr) ? arr : Array.from(arr); }
 
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) arr2[i] = arr[i]; return arr2; } else { return Array.from(arr); } }
+
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var Point = function Point() {
+  var x = arguments.length <= 0 || arguments[0] === undefined ? 0 : arguments[0];
+  var y = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
+
   _classCallCheck(this, Point);
+
+  this.x = x;
+  this.y = y;
 };
 
 var Range = function Range() {
@@ -31,9 +39,23 @@ var Matrix = (function () {
   }
 
   _createClass(Matrix, [{
+    key: "toString",
+    value: function toString() {
+      var x = arguments.length <= 0 || arguments[0] === undefined ? " " : arguments[0];
+      var y = arguments.length <= 1 || arguments[1] === undefined ? "\n" : arguments[1];
+      return this.Matrix.map(function (Row) {
+        return Row.join(x);
+      }).join(y);
+    }
+  }, {
     key: "set",
     value: function set(x, y, value) {
-      this.Matrix[y - 1][x - 1] = value;
+      if (x instanceof Point) this.Matrix[x.y][x.x] = y;else this.Matrix[y][x] = value;
+    }
+  }, {
+    key: "fill",
+    value: function fill(range) {
+      return this;
     }
   }, {
     key: "expand",
@@ -46,14 +68,58 @@ var Matrix = (function () {
         });
       });
     }
+  }, {
+    key: "each",
+    value: function each(func) {
+      return this.Matrix.map(function (Row, Y) {
+        return Row.map(function (Value, X) {
+          return func(Value, new Point(X, Y));
+        });
+      });
+    }
+  }, {
+    key: "map",
+    value: function map(func) {
+      this.Matrix = this.each(func);return this;
+    }
   }]);
 
   return Matrix;
 })();
 
 var Handle = {
-  AlignRight: function AlignRight(Matrix) {},
-  AlignLeft: function AlignLeft(Matrix) {}
+  // == Items ==
+  // CastString
+  // AlignLeft
+  // AlignRight
+
+  CastString: function CastString(matrix) {
+    return matrix.map(function (Value) {
+      return (Value + "").trim();
+    });
+  },
+
+  AlignLeft: function AlignLeft(matrix) {
+    var _ref;
+
+    // Assuming matrix instance of Matrix
+    var Length = Math.max.apply(Math, _toConsumableArray((_ref = []).concat.apply(_ref, _toConsumableArray(matrix.each(function (Value) {
+      return +Value.length;
+    })))));
+    return matrix.map(function (Value) {
+      return Value + " ".repeat(Length - Value.length);
+    });
+  },
+  AlignRight: function AlignRight(matrix) {
+    var _ref2;
+
+    var Length = Math.max.apply(Math, _toConsumableArray((_ref2 = []).concat.apply(_ref2, _toConsumableArray(matrix.each(function (Value) {
+      return +Value.length;
+    })))));
+    return matrix.map(function (Value) {
+      return " ".repeat(Length - Value.length) + Value;
+    });
+  }
 };
 
 var Blocks = function Blocks(code, inputs, opts) {
@@ -85,13 +151,102 @@ var Blocks = function Blocks(code, inputs, opts) {
 
   if (SetupSizeY) MainMatrix.expand(SetupSizeX, SetupSizeY);else if (SetupSizeX !== "?") MainMatrix.expand(SetupSizeX, SetupSizeX);
 
-  /*=== Options Start ===*/
+  /*=== OPTIONS START ===*/
   var Options = {
+    $S: Handle.CastString,
+
     a: Handle.AlignLeft,
     A: Handle.AlignRight
   };
+  var OptsDefault = ["$S"]; // CastString
+  var Opts = function Opts() {
+    return [].concat(_toConsumableArray(SetupOpt), OptsDefault).forEach(function (opt) {
+      var Response = MainOptions[opt](MainMatrix);
+      if (Response) MainMatrix = Response;
+    });
+  };
 
-  return JSON.stringify(MainMatrix.Matrix);
+  /*=== PARSING START  ===*/
+  var Code = SetupCode;
+
+  // The reason I'm using a 2D array is that Map doesn't allow duplicates so $n|Fib can't be used twice
+  var CodeTokens = []; // [Statement Body, Statement Name]
+
+  // Constants
+
+  // Max variables
+  // This avoids infinite loops
+  var MAX_ESCAPE = 65536; // 2^16
+
+  // Parsing Closure
+  // This lets you be messy with variables
+  {
+    var Location = 0; // Negative represents a header,
+    var StatementHead = "";
+    var StatementBody = "";
+
+    var StatementBodyIgnoreIndex = -1;
+    var StatementBodyIgnoreLiteral = "";
+
+    var StatementBodyIgnore = ["\"\"\\", "''\\"]; // Start, End, Escape. If Escape === End, no escape
+    var StatementBodyIgnoreStart = StatementBodyIgnore.map(function (group) {
+      return group[0];
+    });
+    var StatementBodyIgnoreEnd = StatementBodyIgnore.map(function (group) {
+      return group[1];
+    });
+    var StatementBodyIgnoreEscape = StatementBodyIgnore.map(function (group) {
+      return group[2];
+    });
+
+    var StatementReset = function StatementReset() {
+      StatementBody = StatementHead = StatementBodyIgnoreLiteral = "";StatementBodyIgnoreIndex = -1;Location = 0;
+    };
+
+    for (var i = 0; i < Code.length; i++) {
+      var Char = Code[i];
+      if (Location >= 0) {
+        // Statement Body
+        if (StatementBodyIgnoreStart.includes(Char)) {
+          StatementBodyIgnoreIndex = StatementBodyIgnoreStart.indexOf(Char);
+          StatementBodyIgnoreLiteral = StatementBodyIgnoreEnd[StatementBodyIgnoreIndex] === StatementBodyIgnoreEscape[StatementBodyIgnoreIndex] ? "" : StatementBodyIgnoreEnd[StatementBodyIgnoreIndex];
+          StatementBody += Code[i++];
+
+          // If length < MAX_ESCAPE, and Char is not the statement end
+          for (var j = i; i - j < MAX_ESCAPE && Code[i] !== StatementBodyIgnoreEnd[StatementBodyIgnoreIndex]; i++) {
+            StatementBody += Code[Code[i] === StatementBodyIgnoreLiteral ? // Is The escape character?
+            ++i : i // Yes? increment i No? i
+            ];
+            if (i - j + 1 === MAX_ESCAPE) console.warn("Approaching Statement Maximum");
+          }
+          StatementBody += Code[i];
+        } else if (/\|/.test(Char)) {
+          // Is a "|" character
+          Location = -1;
+        } else if (/\S/.test(Char)) {
+          // Not whitespace
+          StatementBody += Char;
+        }
+      } else {
+        // Statement Head
+        if (/\S/.test(Char)) {
+          // Not Whitespace
+          if (Char === ";") {
+            // End of Line
+            CodeTokens.push([StatementBody, StatementHead]);
+            StatementReset();
+          } else {
+            // Header Char
+            StatementHead += Char;
+          }
+        }
+      }
+    }
+  }
+  console.log(CodeTokens);
+
+  // Output
+  return MainMatrix.Matrix.toString(" ", "\n");
 };
 
 Blocks.Golf = function (input, ungolf) {
