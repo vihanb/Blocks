@@ -38,8 +38,10 @@ Column  |    "c"    | Loops through a specified column
 ## Example Code
 
 ```
-2,1 : A :
+3,1 : A :
 "Hello, World!"         | $my_str
 1+2*3                   | $my_num
-2,1 = [$my_str,$my_num] | Set
+$my_num                 | $nth_fib
+
+3,1 = [$my_str,$my_num,$nth_fib] | Set
 ```
