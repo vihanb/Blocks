@@ -142,12 +142,12 @@ var Blocks = function Blocks(code, inputs, opts) {
 
   /*=== SETUP START ===*/
 
-  var _SetupSize$split = SetupSize.split(",");
+  var _SetupSize$match = SetupSize.match(/(?:\d+|\?)/g);
 
-  var _SetupSize$split2 = _slicedToArray(_SetupSize$split, 2);
+  var _SetupSize$match2 = _slicedToArray(_SetupSize$match, 2);
 
-  var SetupSizeX = _SetupSize$split2[0];
-  var SetupSizeY = _SetupSize$split2[1];
+  var SetupSizeX = _SetupSize$match2[0];
+  var SetupSizeY = _SetupSize$match2[1];
 
   if (SetupSizeY) MainMatrix.expand(SetupSizeX, SetupSizeY);else if (SetupSizeX !== "?") MainMatrix.expand(SetupSizeX, SetupSizeX);
 
@@ -172,78 +172,185 @@ var Blocks = function Blocks(code, inputs, opts) {
   // The reason I'm using a 2D array is that Map doesn't allow duplicates so $n|Fib can't be used twice
   var CodeTokens = []; // [Statement Body, Statement Name]
 
-  // Constants
-
-  // Max variables
-  // This avoids infinite loops
-  var MAX_ESCAPE = 65536; // 2^16
-
-  // Parsing Closure
-  // This lets you be messy with variables
+  // Parsing Closures
+  // Contains all the data needed for parsing
   {
-    var Location = 0; // Negative represents a header,
-    var StatementHead = "";
-    var StatementBody = "";
+    (function () {
+      var Location = 0; // Negative represents a header,
+      var StatementHead = "";
+      var StatementBody = "";
 
-    var StatementBodyIgnoreIndex = -1;
-    var StatementBodyIgnoreLiteral = "";
+      var StatementBodyIgnoreIndex = -1;
+      var StatementBodyIgnoreLiteral = "";
 
-    var StatementBodyIgnore = ["\"\"\\", "''\\"]; // Start, End, Escape. If Escape === End, no escape
-    var StatementBodyIgnoreStart = StatementBodyIgnore.map(function (group) {
-      return group[0];
-    });
-    var StatementBodyIgnoreEnd = StatementBodyIgnore.map(function (group) {
-      return group[1];
-    });
-    var StatementBodyIgnoreEscape = StatementBodyIgnore.map(function (group) {
-      return group[2];
-    });
+      var StatementBodyIgnore = ["\"\"\\", "''\\"]; // Start, End, Escape. If Escape === End, no escape
+      var StatementBodyIgnoreStart = StatementBodyIgnore.map(function (group) {
+        return group[0];
+      });
+      var StatementBodyIgnoreEnd = StatementBodyIgnore.map(function (group) {
+        return group[1];
+      });
+      var StatementBodyIgnoreEscape = StatementBodyIgnore.map(function (group) {
+        return group[2];
+      });
 
-    var StatementReset = function StatementReset() {
-      StatementBody = StatementHead = StatementBodyIgnoreLiteral = "";StatementBodyIgnoreIndex = -1;Location = 0;
-    };
+      var StatementReset = function StatementReset() {
+        StatementBody = StatementHead = StatementBodyIgnoreLiteral = "";StatementBodyIgnoreIndex = -1;Location = 0;
+      };
 
-    for (var i = 0; i < Code.length; i++) {
-      var Char = Code[i];
-      if (Location >= 0) {
-        // Statement Body
-        if (StatementBodyIgnoreStart.includes(Char)) {
-          StatementBodyIgnoreIndex = StatementBodyIgnoreStart.indexOf(Char);
-          StatementBodyIgnoreLiteral = StatementBodyIgnoreEnd[StatementBodyIgnoreIndex] === StatementBodyIgnoreEscape[StatementBodyIgnoreIndex] ? "" : StatementBodyIgnoreEnd[StatementBodyIgnoreIndex];
-          StatementBody += Code[i++];
+      // Maximum Variables
+      var MAX_ESCAPE = 65536; // 2^16
+      var MAX_NESTED = 256; // 2 ^ 8
+      var MAX_NUMLEN = 16;
 
-          // If length < MAX_ESCAPE, and Char is not the statement end
-          for (var j = i; i - j < MAX_ESCAPE && Code[i] !== StatementBodyIgnoreEnd[StatementBodyIgnoreIndex]; i++) {
-            StatementBody += Code[Code[i] === StatementBodyIgnoreLiteral ? // Is The escape character?
-            ++i : i // Yes? increment i No? i
-            ];
-            if (i - j + 1 === MAX_ESCAPE) console.warn("Approaching Statement Maximum");
-          }
-          StatementBody += Code[i];
-        } else if (/\|/.test(Char)) {
-          // Is a "|" character
-          Location = -1;
-        } else if (/\S/.test(Char)) {
-          // Not whitespace
-          StatementBody += Char;
-        }
-      } else {
-        // Statement Head
-        if (/\S/.test(Char)) {
-          // Not Whitespace
-          if (Char === ";") {
-            // End of Line
-            CodeTokens.push([StatementBody, StatementHead]);
-            StatementReset();
+      // Parsing Closure - A
+      // Simplified the input to a bare representation
+      {
+        for (var i = 0; i < Code.length; i++) {
+          var Char = Code[i];
+          if (Location >= 0) {
+            // Statement Body
+            if (StatementBodyIgnoreStart.includes(Char)) {
+              StatementBodyIgnoreIndex = StatementBodyIgnoreStart.indexOf(Char);
+              StatementBodyIgnoreLiteral = StatementBodyIgnoreEnd[StatementBodyIgnoreIndex] === StatementBodyIgnoreEscape[StatementBodyIgnoreIndex] ? "" : StatementBodyIgnoreEnd[StatementBodyIgnoreIndex];
+              StatementBody += Code[i++];
+
+              // If length < MAX_ESCAPE, and Char is not the statement end
+              for (var j = i; i - j < MAX_ESCAPE && Code[i] !== StatementBodyIgnoreEnd[StatementBodyIgnoreIndex]; i++) {
+                StatementBody += Code[Code[i] === StatementBodyIgnoreLiteral ? // Is The escape character?
+                ++i : i // Yes? increment i No? i
+                ];
+                if (i - j + 1 === MAX_ESCAPE) console.warn("Approaching Statement Maximum");
+              }
+              StatementBody += Code[i];
+            } else if (/\|/.test(Char)) {
+              // Is a "|" character
+              Location = -1;
+            } else if (/\S/.test(Char)) {
+              // Not whitespace
+              StatementBody += Char;
+            }
           } else {
-            // Header Char
-            StatementHead += Char;
+            // Statement Head
+            if (/\S/.test(Char)) {
+              // Not Whitespace
+              if (Char === ";") {
+                // End of Line
+                CodeTokens.push([StatementBody, StatementHead]);
+                StatementReset();
+              } else {
+                // Header Char
+                StatementHead += Char;
+              }
+            }
           }
         }
       }
-    }
+
+      // Temporary Operator Data
+      var OperatorList = new Map([["+", function (left, right) {
+        if (left === undefined) left = 0;
+        return left + right;
+      }], ["-", function (left, right) {
+        if (left === undefined) left = 0;
+        return left - right;
+      }], ["/", function (left, right) {
+        return left / right;
+      }], ["*", function (left, right) {
+        return left * right;
+      }], ["%", function (left, right) {
+        return left % right;
+      }], ["^", function (left, right) {
+        return Math.pow(left, right);
+      }]]);
+      var OperatorArity = [// Top is higher, bottom is lower
+      ["^", "/", "*", "%"], ["-", "+"], [":"]].reverse();
+
+      var OperatorMatchAll = new RegExp("[0-9()" + [].concat(_toConsumableArray(OperatorList.keys())).join("") + "]");
+      var OperatorMatchOperator = new RegExp("[" + [].concat(_toConsumableArray(OperatorList.keys())).join("") + "]");
+
+      // Parsing Closure B
+      // This handles expressions and inserts the input
+      // Handles order of operations and replaces ` with input
+      {
+        CodeTokens.map(function (_ref3) {
+          var _ref32 = _slicedToArray(_ref3, 2);
+
+          var CodeBody = _ref32[0];
+          var CodeHeader = _ref32[1];
+
+          for (var i = 0; i < CodeBody.length; i++) {
+            var Char = CodeBody[i];
+            // Ignore escapes
+            if (StatementBodyIgnoreStart.includes(Char)) {
+              StatementBodyIgnoreIndex = StatementBodyIgnoreStart.indexOf(Char);
+              StatementBodyIgnoreLiteral = StatementBodyIgnoreEnd[StatementBodyIgnoreIndex] === StatementBodyIgnoreEscape[StatementBodyIgnoreIndex] ? "" : StatementBodyIgnoreEnd[StatementBodyIgnoreIndex];
+              StatementBody += CodeBody[i++];
+
+              // If length < MAX_ESCAPE, and Char is not the statement end
+              for (var j = i; i - j < MAX_ESCAPE && CodeBody[i] !== StatementBodyIgnoreEnd[StatementBodyIgnoreIndex]; i++) {
+                StatementBody += CodeBody[CodeBody[i] === StatementBodyIgnoreLiteral ? // Is The escape character?
+                ++i : i // Yes? increment i No? i
+                ];
+                if (i - j + 1 === MAX_ESCAPE) console.warn("Approaching Statement Maximum");
+              }
+              StatementBody += CodeBody[i];
+            } else if (OperatorList.has(Char)) {
+              (function () {
+                // Is an operator
+                var OperatorValue = Char;
+                var OperatorValueArity = OperatorArity.findIndex(function (Level) {
+                  return Level.contains(OperatorValue);
+                });
+
+                var DataLeft = null;
+                var DataRight = null;
+
+                var ModLeft = null;
+                var ModLeftStart = null;
+                var ModLeftEnd = null;
+
+                var ModRight = null;
+                var ModRightStart = null;
+                var ModRightEnd = null;
+
+                var NewNestLevel = 0;
+                var NewOperator = null;
+                var NewDigit = null;
+
+                ModLeftend = i - 1;
+                ModRightStart = i + 1;
+                // HALP I DONT KNOW HOW TO DO THIS
+                for (var j = i; j > 0; j--) {
+                  if (OperatorMatchAll.test(CodeBody[j])) {
+                    if (OperatorMatchOperator.test(CodeBody[j])) {
+                      // Operator encountered
+                      NewOperator = OperatorArity.findIndex(function (Level) {
+                        return Level.contains(OperatorValue);
+                      });
+                      if (NewOperator > OperatorArity) {} else if (NewOperator < OperatorArity) {} else if (NewOperator === OperatorArity) {}
+                    } else if (/[\d]/.test(CodeBody[j])) {
+                      // Digit encountered
+                    } else if (CodeBody[j] === "(") {
+                        // Open paranthesis
+                      } else if (CodeBody[j] === ")") {
+                          // Close parenthesis
+                        }
+                  } else {
+                      // Not an operator character
+                    }
+                }
+              })();
+            } else {
+                StatementBody += Char;
+              }
+          }
+          return [CodeBody, CodeHeader];
+        });
+      }
+      console.log(CodeTokens);
+    })();
   }
-  console.log(CodeTokens);
 
   // Output
   return MainMatrix.Matrix.toString(" ", "\n");
