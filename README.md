@@ -33,3 +33,13 @@ Origin  |    "O"    | Sets the origin (NOT WORKING)
 Each    |    "e"    | Loop through each matrix item
 Row     |    "r"    | Loops through a specified row
 Column  |    "c"    | Loops through a specified column
+
+
+## Example Code
+
+```
+2,1 : A :
+"Hello, World!"         | $my_str
+1+2*3                   | $my_num
+2,1 = [$my_str+$my_num] | Set
+```
