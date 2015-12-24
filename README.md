@@ -41,5 +41,5 @@ Column  |    "c"    | Loops through a specified column
 2,1 : A :
 "Hello, World!"         | $my_str
 1+2*3                   | $my_num
-2,1 = [$my_str+$my_num] | Set
+2,1 = [$my_str,$my_num] | Set
 ```
